@@ -16,16 +16,24 @@ This can also be used to generate tile urls.
 
   func main() {
     // specify tile url format
-    maptile.TileURL = "http://otile{s}.mqcdn.com/tiles/1.0.0/map/{z}/{x}/{y}.png"
-    maptile.Subdomains = []string{"0", "1", "2", "3"}
-    // create a latlng reference
-    latlng := maptile.LatLng{Lat: -5.123, Lng: 40.234}
-    // get the tile from the latlng at a specified zoom
-    tile := latlng.Tile(14)
+    maptile.UrlFormat = "http://otile{s}.mqcdn.com/tiles/1.0.0/map/{z}/{x}/{y}.png"
+    maptile.UrlSubdomains = []string{"1", "2", "3", "4"}
+
+    // find a tile from latitude, longitude & zoom
+    myTile := maptile.FromLatLng(50.263195, -5.051041, 12)
+
     // get the url from this tile
-    url := tile.Url()
+    url := myTile.Url()
+
     // output to console
     fmt.Println(url)
+
+    // set the storage location for tiles
+    maptile.TileStore = "C:\\tiles\\"
+
+    // fetch and save the tile image
+    myTile.SaveImage()
+
   }
 ```
 

@@ -2,45 +2,108 @@ package maptile
 
 import (
 	"fmt"
+	"image"
+	"image/jpeg"
 	"math"
 	"math/rand"
+	"net/http"
+	"os"
 	"strings"
 )
 
-var TileURL string
-var Subdomains []string
+var UrlFormat string
+var UrlSubdomains []string
+var TileStore string
 
-type Coords struct {
+type MapTile struct {
 	X, Y float64
 	Zoom int
 }
 
-func (c Coords) AsInt() Coords {
-	return Coords{math.Floor(c.X), math.Floor(c.Y), c.Zoom}
+// methods
+
+func (t MapTile) FloorX() int {
+	return int(math.Floor(t.X))
 }
 
-func (c Coords) Url() string {
-	s := Subdomains[rand.Intn(len(Subdomains)-1)]
-	url := TileURL
-	url = strings.Replace(url, "{x}", fmt.Sprintf("%d", int(c.AsInt().X)), -1)
-	url = strings.Replace(url, "{y}", fmt.Sprintf("%d", int(c.AsInt().Y)), -1)
-	url = strings.Replace(url, "{z}", fmt.Sprintf("%d", c.Zoom), -1)
+func (t MapTile) FloorY() int {
+	return int(math.Floor(t.Y))
+}
+
+func (t MapTile) Url() string {
+	s := UrlSubdomains[rand.Intn(len(UrlSubdomains)-1)]
+	url := UrlFormat
+	url = strings.Replace(url, "{x}", fmt.Sprintf("%d", t.FloorX()), -1)
+	url = strings.Replace(url, "{y}", fmt.Sprintf("%d", t.FloorY()), -1)
+	url = strings.Replace(url, "{z}", fmt.Sprintf("%d", t.Zoom), -1)
 	url = strings.Replace(url, "{s}", s, -1)
 
 	return url
 }
+func (t MapTile) Filename() string {
+	filename := "Tile-{x}-{y}-{z}.jpg"
+	filename = strings.Replace(filename, "{x}", fmt.Sprintf("%d", t.FloorX()), -1)
+	filename = strings.Replace(filename, "{y}", fmt.Sprintf("%d", t.FloorY()), -1)
+	filename = strings.Replace(filename, "{z}", fmt.Sprintf("%d", t.Zoom), -1)
 
-type LatLng struct {
-	Lat, Lng float64
+	return filename
 }
 
-func (ll LatLng) Tile(zoom int) Coords {
-	var c Coords
-	c.Zoom = zoom
-	c.X = (((ll.Lng + 180) / 360) * math.Pow(2, float64(zoom)))
-	c.Y = ((1 - math.Log(math.Tan(deg2rad(ll.Lat))+1/math.Cos(deg2rad(ll.Lat)))/math.Pi) / 2 * math.Pow(2, float64(zoom)))
-	return c
+func (t MapTile) GetImage() image.Image {
+	res, err := http.Get(t.Url())
+
+	if err != nil {
+		fmt.Println(err)
+		return nil
+	}
+
+	if res.StatusCode != 200 {
+		fmt.Println(res.Status)
+		return nil
+	}
+	defer res.Body.Close()
+	img, _, err := image.Decode(res.Body)
+	if err != nil {
+		fmt.Println("Error decoding map tile")
+		return nil
+	}
+
+	return img
 }
+
+func (t MapTile) SaveImage() bool {
+	img := t.GetImage()
+
+	toimg, err := os.Create(TileStore + t.Filename())
+	if err != nil {
+		fmt.Println(err)
+		return false
+	}
+
+	defer toimg.Close()
+
+	var opt jpeg.Options
+	opt.Quality = 80
+	err = jpeg.Encode(toimg, img, &opt)
+
+	return err == nil
+}
+
+// constructors
+
+func New(X, Y float64, Zoom int) MapTile {
+	return MapTile{X, Y, Zoom}
+}
+
+func FromLatLng(Lat, Lng float64, Zoom int) MapTile {
+	var t MapTile
+	t.Zoom = Zoom
+	t.X = (((Lng + 180) / 360) * math.Pow(2, float64(Zoom)))
+	t.Y = ((1 - math.Log(math.Tan(deg2rad(Lat))+1/math.Cos(deg2rad(Lat)))/math.Pi) / 2 * math.Pow(2, float64(Zoom)))
+	return t
+}
+
+// utilities
 
 func deg2rad(deg float64) float64 {
 	return deg * (math.Pi / 180)
